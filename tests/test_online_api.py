@@ -7,8 +7,14 @@ from configs import ONLINE_LLM_MODEL
 from server.model_workers.base import *
 from server.utils import get_model_worker_config, list_config_llm_models
 from pprint import pprint
+from server.knowledge_base.utils import make_text_splitter
 import pytest
+import os
 
+from configs import (
+    CHUNK_SIZE,
+    OVERLAP_SIZE
+)
 
 workers = []
 for x in list_config_llm_models()["online"]:
@@ -23,7 +29,7 @@ print(f"all workers to test: {workers}")
 def test_chat(worker):
     params = ApiChatParams(
         messages = [
-            {"role": "user", "content": "你是谁"},
+            {"role": "user", "content": "给我讲个笑话"},
         ],
     )
     print(f"\nchat with {worker} \n")
@@ -39,7 +45,7 @@ def test_chat(worker):
 def test_embeddings(worker):
     params = ApiEmbeddingsParams(
         texts = [
-            "LangChain-Chatchat (原 Langchain-ChatGLM): 基于 Langchain 与 ChatGLM 等大语言模型的本地知识库问答应用实现。",
+            "LangChain-Chatchat (原 Langchain-ChatGLM) 基于 Langchain 与 ChatGLM 等大语言模型的本地知识库问答应用实现。",
             "一种利用 langchain 思想实现的基于本地知识库的问答应用，目标期望建立一套对中文场景与开源模型支持友好、可离线运行的知识库问答解决方案。",
         ]
     )
@@ -59,6 +65,58 @@ def test_embeddings(worker):
             print("向量长度：", len(embeddings[0]))
 
 
+def text(splitter_name):
+    from langchain import document_loaders
+
+    # 使用DocumentLoader读取文件
+    filepath = "../knowledge_base/samples/content/test_files/mytest.txt"
+    loader = document_loaders.UnstructuredFileLoader(filepath, autodetect_encoding=True)
+    docs = loader.load()
+    text_splitter = make_text_splitter(splitter_name, CHUNK_SIZE, OVERLAP_SIZE)
+    if splitter_name == "MarkdownHeaderTextSplitter":
+        docs = text_splitter.split_text(docs[0].page_content)
+        for doc in docs:
+            if doc.metadata:
+                doc.metadata["source"] = os.path.basename(filepath)
+    else:
+        docs = text_splitter.split_documents(docs)
+    for doc in docs:
+        print(doc)
+    return docs
+
+# 测试根据分词内容进行获取embedding
+@pytest.mark.parametrize("worker", workers)
+def test_embeddings_content(worker):
+
+    '''
+
+    docs = text("RecursiveCharacterTextSplitter")
+
+    print(len(docs))
+    print("=================")
+    print(docs[0])
+
+    '''
+
+    params = ApiEmbeddingsParams(
+        texts = [
+            "移动云项目"
+        ]
+    )
+
+    if worker_class := get_model_worker_config(worker).get("worker_class"):
+        if worker_class.can_embedding():
+            print(f"\embeddings with {worker} \n")
+            resp = worker_class().do_embeddings(params)
+
+            pprint(resp, depth=2)
+            assert resp["code"] == 200
+            assert "data" in resp
+            embeddings = resp["data"]
+            assert isinstance(embeddings, list) and len(embeddings) > 0
+            assert isinstance(embeddings[0], list) and len(embeddings[0]) > 0
+            assert isinstance(embeddings[0][0], float)
+            print("向量长度：", len(embeddings[0]))
 # @pytest.mark.parametrize("worker", workers)
 # def test_completion(worker):
 #     params = ApiCompletionParams(prompt="五十六个民族")

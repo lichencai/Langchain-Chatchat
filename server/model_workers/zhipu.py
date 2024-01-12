@@ -73,7 +73,7 @@ class ChatGLMWorker(ApiModelWorker):
                     self.logger.error(f"请求智谱 API 时发生错误：{response}")
                     return response  # dict with code & msg
         except Exception as e:
-            self.logger.error(f"请求智谱 API 时发生错误：{data}")
+            self.logger.error("请求智谱 API 时发生错误")
             data = {"code": 500, "msg": f"对文本向量化时出错：{e}"}
             return data
 
